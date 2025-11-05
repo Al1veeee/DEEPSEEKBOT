@@ -76,7 +76,7 @@ async def start_game_callback(callback: types.CallbackQuery, state: FSMContext):
             [KeyboardButton(text="/начать")],
             [KeyboardButton(text="/статус"), KeyboardButton(text="/инвентарь")],
             [KeyboardButton(text="/заклинания"), KeyboardButton(text="/торговля")],
-            [KeyboardButton(text="/отдых")]
+            [KeyboardButton(text="/отдых"), KeyboardButton(text="/форматирование")]
         ],
         resize_keyboard=True
     )
@@ -87,6 +87,36 @@ async def start_game_callback(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(history=history)
     await callback.answer()
 
+@router.message(F.text == "/форматирование")
+async def format_reminder(message: Message, state: FSMContext):
+    """Отправляем напоминание о форматировании в историю диалога с AI"""
+    data = await state.get_data()
+    history = data.get("history", [])
+    
+    format_instruction = (
+        "НАПОМИНАНИЕ О ФОРМАТИРОВАНИИ: "
+        "Используй правильное форматирование для Telegram: "
+        "между абзацами только одна пустая строка, "
+        "не добавляй лишние переносы, "
+        "используй HTML-теги (<b>жирный</b>, <i>курсив</i>), "
+        "добавляй эмодзи для визуальных акцентов. "
+        "Текст должен быть готов к отправке с parse_mode=HTML."
+    )
+    
+    history.append({"role": "user", "content": format_instruction})
+    
+    await message.answer(
+        "📝 <i>Напоминание о форматировании отправлено Мастеру...</i>",
+        parse_mode=ParseMode.HTML
+    )
+    
+    response = await ai_generate(history)
+    response = response.replace("\n", "\n\n")
+    
+    await message.answer(response, parse_mode=ParseMode.HTML)
+    
+    history.append({"role": "assistant", "content": response})
+    await state.update_data(history=history)
 
 @router.message(Gen.history)
 async def continue_dialog(message: Message, state: FSMContext):
