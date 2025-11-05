@@ -12,7 +12,6 @@ client = AsyncOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
 )
 
-# Загружаем промпт из файла
 try:
     with open("prompt.txt", "r", encoding="utf-8") as file:
         prompt_content = file.read().strip()

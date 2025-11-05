@@ -6,9 +6,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 import sys
 import os
-import random  # Добавлен импорт random
+import random
 
-# чтобы корректно импортировать модули
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from generate import ai_generate, prompt_content
 
@@ -25,7 +24,6 @@ async def cmd_start(message: Message, state: FSMContext):
     """Приветствие и inline-кнопка запуска"""
     await state.clear()
 
-    # Inline-кнопка (а не обычная клавиатура)
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🎲 Начать приключение", callback_data="start_game")]
@@ -87,7 +85,7 @@ async def start_game_callback(callback: types.CallbackQuery, state: FSMContext):
 
     history.append({"role": "assistant", "content": response})
     await state.update_data(history=history)
-    await callback.answer()  # закрываем "часики" у inline кнопки
+    await callback.answer()
 
 
 @router.message(Gen.history)
@@ -131,7 +129,6 @@ async def continue_dialog(message: Message, state: FSMContext):
 @router.message(Gen.wait)
 async def stop_flood(message: Message):
     """Если пользователь пишет во время генерации"""
-    # Случайные сообщения ожидания
     waiting_messages = [
         "⚙️ <i>Подожди, идёт обработка запроса...</i>",
         "⏳ <i>Магия еще не готова, подожди немного...</i>",
