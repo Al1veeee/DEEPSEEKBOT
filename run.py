@@ -2,7 +2,6 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from config import TG_TOKEN
 from handlers import router
-
 async def main():
     bot = Bot(token=TG_TOKEN)
     dp = Dispatcher()
