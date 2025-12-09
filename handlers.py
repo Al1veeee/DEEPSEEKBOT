@@ -168,8 +168,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
     await message.answer(
         "⚔️ <b>Добро пожаловать в игру Dungeons and dragons!</b> ⚔️\n\n"
-        "🛡️ <i>Храбрец, ты стоишь на пороге великих свершений...</i>\n\n"
-        "Осмелься ли ты сделать первый шаг?",
+        "Осмелишься ли ты сделать первый шаг?",
         reply_markup=keyboard,
         parse_mode=ParseMode.HTML,
     )
@@ -178,9 +177,11 @@ async def cmd_start(message: Message, state: FSMContext):
 async def start_game_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
-    text = "<b>Создание персонажа — шаг 1:</b>\n<i>Выберите расу:</i>\n\n"
+    text = "🛡️ <b>Создание персонажа — шаг 1</b>\n"
+    text += "<i>Выберите расу:</i>\n\n"
     for num, race in RACES.items():
-        text += f"{num}. {race}\n"
+        text += f"  {num}. {race}\n"  # отступ для списка
+    text += "\n<i>Введите номер выбранной расы:</i>"
 
     await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
     await state.set_state(CreateChar.race)
@@ -195,7 +196,7 @@ async def set_race(message: Message, state: FSMContext):
 
     await state.update_data(race=race)
     await state.set_state(CreateChar.name)
-    await message.answer("<b>Создание персонажа — шаг 2:</b>\n<i>Введите имя персонажа:</i>\n\n", parse_mode=ParseMode.HTML)
+    await message.answer("✏️ <b>Создание персонажа — шаг 2:</b>\n<i>Введите имя персонажа:</i>\n\n", parse_mode=ParseMode.HTML)
 
 @router.message(CreateChar.name)
 async def set_name(message: Message, state: FSMContext):
@@ -206,9 +207,11 @@ async def set_name(message: Message, state: FSMContext):
         return await message.answer(error_msg)
     
     await state.update_data(name=name)
-    text = "<b>Создание персонажа — шаг 3:</b>\n<i>Выберите класс из списка:</i>\n\n"
+    text = "⚔️ <b>Создание персонажа — шаг 3</b>\n"
+    text += "<i>Выберите класс:</i>\n\n"
     for num, cl in CLASSES.items():
-        text += f"{num}. {cl}\n"
+        text += f"  {num}. {cl}\n"
+    text += "\n<i>Введите номер выбранного класса:</i>"
     await message.answer(text, parse_mode=ParseMode.HTML)
     await state.set_state(CreateChar.char_class)
 
@@ -220,9 +223,11 @@ async def set_class(message: Message, state: FSMContext):
         return await message.answer("❗ Введи номер класса (например: 1).")
 
     await state.update_data(char_class=cl)
-    text = "<b>Создание персонажа — шаг 4:</b>\n<i>Выберите предысторию из списка:</i>\n\n"
+    text = "📖 <b>Создание персонажа — шаг 4</b>\n"
+    text += "<i>Выберите предысторию:</i>\n\n"
     for num, bg in BACKGROUNDS.items():
-        text += f"{num}. {bg}\n"
+        text += f"  {num}. {bg}\n"
+    text += "\n<i>Введите номер выбранной предыстории:</i>"
     await message.answer(text, parse_mode=ParseMode.HTML)
     await state.set_state(CreateChar.background)
 
@@ -239,10 +244,11 @@ async def set_background(message: Message, state: FSMContext):
     await state.update_data(stats_report=stats_report)
 
     await message.answer(
-        "<b>Создание персонажа — шаг 5:</b>\n\n"
-        f"{stats_report}\n\n"
-        "Применить бонусы расы автоматически? (да/нет)",
-        parse_mode=ParseMode.HTML,
+        "🎲 <b>Создание персонажа — шаг 5</b>\n\n"
+        "<b>Характеристики:</b>\n" +
+        "\n".join([f"  {line}" for line in stats_report.split("\n")]) +
+        "\n\n<i>Применить бонусы расы автоматически? (да/нет)</i>",
+        parse_mode=ParseMode.HTML
     )
     await state.set_state(CreateChar.apply_bonuses)
 
@@ -254,7 +260,7 @@ async def set_bonuses(message: Message, state: FSMContext):
 
     await state.update_data(apply_bonuses=answer)
     await message.answer(
-        "<b>Шаг 6: Опишите характер персонажа:</b>\n"
+        "🧠 <b>Шаг 6: Опишите характер персонажа</b>\n"
         "<i>Опишите основные черты характера, мотивации, страхи и т.д.</i>",
         parse_mode=ParseMode.HTML
     )
@@ -270,7 +276,7 @@ async def set_personality(message: Message, state: FSMContext):
     
     await state.update_data(personality=personality)
     await message.answer(
-        "<b>Шаг 7: Опишите внешность персонажа:</b>\n"
+        "🎨 <b>Шаг 7: Опишите внешность персонажа</b>\n"
         "<i>Опишите внешние черты, одежду, отличительные особенности.</i>",
         parse_mode=ParseMode.HTML
     )
