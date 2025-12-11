@@ -20,6 +20,7 @@ import re
 
 CURRENT_DIR = os.path.dirname(__file__)
 PROMPT_PATH = os.path.join(CURRENT_DIR, "prompt.txt")
+START_SCENE_PATH = os.path.join(CURRENT_DIR, "start_scene.txt")
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from generate import ai_generate, prompt_content
@@ -43,96 +44,28 @@ class Gen(StatesGroup):
     wait = State()
     history = State()
 
-RACES = {
-    1: "Человек",
-    2: "Эльф",
-    3: "Дроу",
-    4: "Гном",
-    5: "Дварф",
-    6: "Драконорожденный",
-    7: "Тифлинг",
-    8: "Полуэльф",
-    9: "Полурослик",
-    10: "Орк",
-    11: "Полуорк",
-    12: "Кобольд",
-    13: "Шейфтер",
-    14: "Людоящер",
-}
-
-CLASSES = {
-    1: "Воин",
-    2: "Паладин",
-    3: "Плут",
-    4: "Волшебник",
-    5: "Жрец",
-    6: "Бард",
-    7: "Варвар",
-    8: "Друид",
-    9: "Монах",
-    10: "Следопыт",
-    11: "Чародей",
-    12: "Изобретатель",
-}
-
-BACKGROUNDS = {
-    1: "Народный герой",
-    2: "Благородный",
-    3: "Отшельник",
-    4: "Бродяга",
-    5: "Артист",
-    6: "Аферист",
-    7: "Солдат",
-    8: "Торговец",
-    9: "Писарь",
-    10: "Следопыт",
-    11: "Ремесленник",
-}
+RACES = {1:"Человек",2:"Эльф",3:"Дроу",4:"Гном",5:"Дварф",6:"Драконорожденный",7:"Тифлинг",8:"Полуэльф",9:"Полурослик",10:"Орк",11:"Полуорк",12:"Кобольд",13:"Шейфтер",14:"Людоящер"}
+CLASSES = {1:"Воин",2:"Паладин",3:"Плут",4:"Волшебник",5:"Жрец",6:"Бард",7:"Варвар",8:"Друид",9:"Монах",10:"Следопыт",11:"Чародей",12:"Изобретатель"}
+BACKGROUNDS = {1:"Народный герой",2:"Благородный",3:"Отшельник",4:"Бродяга",5:"Артист",6:"Аферист",7:"Солдат",8:"Торговец",9:"Писарь",10:"Следопыт",11:"Ремесленник"}
 
 def roll_4d6_drop_lowest():
-    rolls = [random.randint(1, 6) for _ in range(4)]
+    rolls = [random.randint(1,6) for _ in range(4)]
     rolls_sorted = sorted(rolls)
-    dropped = rolls_sorted[0]
-    total = sum(rolls_sorted[1:])
-    return total, rolls, dropped
+    return sum(rolls_sorted[1:]), rolls, rolls_sorted[0]
 
 def generate_stats_auto():
-    labels = ["Сила", "Ловкость", "Телосложение", "Интеллект", "Мудрость", "Харизма"]
+    labels = ["Сила","Ловкость","Телосложение","Интеллект","Мудрость","Харизма"]
     stats = {}
     report_lines = []
     for lab in labels:
         total, rolls, dropped = roll_4d6_drop_lowest()
         stats[lab] = total
         report_lines.append(f"{lab}: {total}")
-    report = "\n".join(report_lines)
-    return stats, report
-
-async def safe_ai_generate(history, state: FSMContext, fallback_state, timeout_sec: int = 60):
-    try:
-        raw = await asyncio.wait_for(ai_generate(history), timeout=timeout_sec)
-        if raw is None:
-            raise RuntimeError("ai_generate вернул None")
-        return raw
-    except asyncio.TimeoutError:
-        logger.exception("ai_generate timeout")
-        try:
-            await state.set_state(fallback_state)
-        except Exception:
-            logger.exception("Не удалось установить fallback_state после таймаута")
-        return "⚠️ Сервис генерации не отвечает (таймаут). Попробуй ещё раз."
-    except Exception as e:
-        logger.exception("Ошибка при вызове ai_generate: %s", e)
-        try:
-            await state.set_state(fallback_state)
-        except Exception:
-            logger.exception("Не удалось установить fallback_state после исключения")
-        return f"⚠️ Произошла ошибка при генерации: {str(e)}"
+    return stats, "\n".join(report_lines)
 
 def trim_history(history, max_pairs=8):
-    limit = max_pairs * 2 + 1
-    if len(history) > limit:
-        return history[-limit:]
-    return history
+    limit = max_pairs*2 + 1
+    return history[-limit:] if len(history) > limit else history
 
 def make_game_keyboard():
     return ReplyKeyboardMarkup(
@@ -146,17 +79,113 @@ def make_game_keyboard():
 
 def validate_text_input(text, min_length=3, max_length=500):
     text = text.strip()
-    
     if len(text) < min_length:
-        return False, f"❌ Слишком короткий текст. Минимум {min_length} символов."
-    
+        return False,f"❌ Слишком короткий текст. Минимум {min_length} символов."
     if len(text) > max_length:
-        return False, f"❌ Слишком длинный текст. Максимум {max_length} символов."
-    
+        return False,f"❌ Слишком длинный текст. Максимум {max_length} символов."
     if re.search(r'[<>{}[\]]', text):
-        return False, "❌ Текст содержит недопустимые символы."
-    
-    return True, ""
+        return False,"❌ Текст содержит недопустимые символы."
+    return True,""
+
+async def safe_ai_generate(history, state: FSMContext, fallback_state, timeout_sec:int=60):
+    try:
+        raw = await asyncio.wait_for(ai_generate(history), timeout=timeout_sec)
+        if raw is None: raise RuntimeError("ai_generate вернул None")
+        return raw
+    except asyncio.TimeoutError:
+        logger.exception("ai_generate timeout")
+        await state.set_state(fallback_state)
+        return "⚠️ Сервис генерации не отвечает (таймаут)."
+    except Exception as e:
+        logger.exception("Ошибка при вызове ai_generate: %s", e)
+        await state.set_state(fallback_state)
+        return f"⚠️ Произошла ошибка при генерации: {str(e)}"
+
+async def finish_creation(message: Message, state: FSMContext):
+    data = await state.get_data()
+    stats = data.get("stats",{})
+    stats_lines = [f"{k}: {v}" for k,v in stats.items()] if isinstance(stats, dict) else [str(stats)]
+    stats_str = "\n".join(stats_lines)
+
+    # Формируем блок CHARACTER
+    character_block = (
+        "[CHARACTER]\n"
+        f"Имя: {data.get('name','')}\n"
+        f"Раса: {data.get('race','')}\n"
+        f"Класс: {data.get('char_class','')}\n"
+        f"Предыстория: {data.get('background','')}\n"
+        f"Характеристики:\n{stats_str}\n"
+        f"Бонусы_расы: {data.get('apply_bonuses','')}\n"
+        f"Характер: {data.get('personality','')}\n"
+        f"Внешность: {data.get('appearance','')}\n"
+        f"День_старта: {data.get('day_counter','1')}\n"
+        f"Снаряжение: {data.get('equipment','Базовая экипировка')}\n"
+        f"Монеты: {data.get('coins','1d6+1')}\n"
+        f"Сумка: {data.get('bag','Пустая сумка')}\n"
+        "[/CHARACTER]\n"
+    )
+
+    try:
+        with open(PROMPT_PATH,"w",encoding="utf-8") as f:
+            f.write(character_block + "\n" + prompt_content)
+    except Exception as e:
+        logger.exception("Не удалось записать prompt.txt: %s", e)
+        await message.answer("⚠️ Ошибка при сохранении prompt.txt.", parse_mode=ParseMode.HTML)
+        await state.set_state(Gen.history)
+        return
+
+    # Формируем словарь для сцены
+    char_data_for_scene = {
+        "name": data.get("name",""),
+        "class": data.get("char_class",""),
+        "race": data.get("race",""),
+        "background": data.get("background",""),
+        "str": stats.get("Сила",0),
+        "dex": stats.get("Ловкость",0),
+        "con": stats.get("Телосложение",0),
+        "int": stats.get("Интеллект",0),
+        "wis": stats.get("Мудрость",0),
+        "cha": stats.get("Харизма",0),
+        "armor": data.get("equipment","Базовая экипировка"),
+        "weapon": "Основное оружие",
+        "coins": data.get("coins","0")
+    }
+
+    # Загружаем шаблон начальной сцены
+    try:
+        with open(START_SCENE_PATH,"r",encoding="utf-8") as f:
+            template = f.read()
+    except Exception:
+        # Если файла нет, используем дефолтный текст
+        template = "{scene_text}"
+
+    first_scene_text = "Вы стоите на пыльной дороге у трактира «Последний привал». В воздухе пахнет дымом и жареным кабаном. Из дверей доносится хриплый смех."
+
+    # Формируем текст сцены
+    start_scene = template.format(
+        char_name=char_data_for_scene["name"],
+        char_class=char_data_for_scene["class"],
+        char_race=char_data_for_scene["race"],
+        char_background=char_data_for_scene["background"],
+        str=char_data_for_scene["str"],
+        dex=char_data_for_scene["dex"],
+        con=char_data_for_scene["con"],
+        int=char_data_for_scene["int"],
+        wis=char_data_for_scene["wis"],
+        cha=char_data_for_scene["cha"],
+        armor=char_data_for_scene["armor"],
+        weapon=char_data_for_scene["weapon"],
+        coins=char_data_for_scene["coins"],
+        scene_text=first_scene_text
+    )
+
+    await message.answer("✨ Персонаж создан! Начало приключения:", parse_mode=ParseMode.HTML)
+    await message.answer(start_scene, parse_mode=ParseMode.HTML, reply_markup=make_game_keyboard())
+
+    history = [{"role":"assistant","content":start_scene}]
+    await state.update_data(history=history)
+    await state.set_state(Gen.history)
+
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
@@ -294,8 +323,8 @@ async def set_appearance(message: Message, state: FSMContext):
     
     await state.update_data(
         day_counter=1,
-        equipment="Базовая экипировка по классу",
-        coins=10,
+        equipment="Базовая экипировка по классу + 1 случайный предмет",
+        coins="1d6+1",
         bag="Пустая сумка"
     )
     
@@ -322,8 +351,8 @@ async def finish_creation(message: Message, state: FSMContext):
         f"Характер: {data.get('personality','')}\n"
         f"Внешность: {data.get('appearance','')}\n"
         f"День_старта: {data.get('day_counter','1')}\n"
-        f"Снаряжение: {data.get('equipment','Базовая экипировка по классу')}\n"
-        f"Монеты: {data.get('coins','10')}\n"
+        f"Снаряжение: {data.get('equipment','Базовая экипировка по классу + 1 случайный предмет')}\n"
+        f"Монеты: {data.get('coins','1d6+1')}\n"
         f"Сумка: {data.get('bag','Пустая сумка')}\n"
         "[/CHARACTER]\n"
     )
