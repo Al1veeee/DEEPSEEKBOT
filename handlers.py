@@ -101,92 +101,6 @@ async def safe_ai_generate(history, state: FSMContext, fallback_state, timeout_s
         await state.set_state(fallback_state)
         return f"⚠️ Произошла ошибка при генерации: {str(e)}"
 
-async def finish_creation(message: Message, state: FSMContext):
-    data = await state.get_data()
-    stats = data.get("stats",{})
-    stats_lines = [f"{k}: {v}" for k,v in stats.items()] if isinstance(stats, dict) else [str(stats)]
-    stats_str = "\n".join(stats_lines)
-
-    # Формируем блок CHARACTER
-    character_block = (
-        "[CHARACTER]\n"
-        f"Имя: {data.get('name','')}\n"
-        f"Раса: {data.get('race','')}\n"
-        f"Класс: {data.get('char_class','')}\n"
-        f"Предыстория: {data.get('background','')}\n"
-        f"Характеристики:\n{stats_str}\n"
-        f"Бонусы_расы: {data.get('apply_bonuses','')}\n"
-        f"Характер: {data.get('personality','')}\n"
-        f"Внешность: {data.get('appearance','')}\n"
-        f"День_старта: {data.get('day_counter','1')}\n"
-        f"Снаряжение: {data.get('equipment','Базовая экипировка')}\n"
-        f"Монеты: {data.get('coins','1d6+1')}\n"
-        f"Сумка: {data.get('bag','Пустая сумка')}\n"
-        "[/CHARACTER]\n"
-    )
-
-    try:
-        with open(PROMPT_PATH,"w",encoding="utf-8") as f:
-            f.write(character_block + "\n" + prompt_content)
-    except Exception as e:
-        logger.exception("Не удалось записать prompt.txt: %s", e)
-        await message.answer("⚠️ Ошибка при сохранении prompt.txt.", parse_mode=ParseMode.HTML)
-        await state.set_state(Gen.history)
-        return
-
-    # Формируем словарь для сцены
-    char_data_for_scene = {
-        "name": data.get("name",""),
-        "class": data.get("char_class",""),
-        "race": data.get("race",""),
-        "background": data.get("background",""),
-        "str": stats.get("Сила",0),
-        "dex": stats.get("Ловкость",0),
-        "con": stats.get("Телосложение",0),
-        "int": stats.get("Интеллект",0),
-        "wis": stats.get("Мудрость",0),
-        "cha": stats.get("Харизма",0),
-        "armor": data.get("equipment","Базовая экипировка"),
-        "weapon": "Основное оружие",
-        "coins": data.get("coins","0")
-    }
-
-    # Загружаем шаблон начальной сцены
-    try:
-        with open(START_SCENE_PATH,"r",encoding="utf-8") as f:
-            template = f.read()
-    except Exception:
-        # Если файла нет, используем дефолтный текст
-        template = "{scene_text}"
-
-    first_scene_text = "Вы стоите на пыльной дороге у трактира «Последний привал». В воздухе пахнет дымом и жареным кабаном. Из дверей доносится хриплый смех."
-
-    # Формируем текст сцены
-    start_scene = template.format(
-        char_name=char_data_for_scene["name"],
-        char_class=char_data_for_scene["class"],
-        char_race=char_data_for_scene["race"],
-        char_background=char_data_for_scene["background"],
-        str=char_data_for_scene["str"],
-        dex=char_data_for_scene["dex"],
-        con=char_data_for_scene["con"],
-        int=char_data_for_scene["int"],
-        wis=char_data_for_scene["wis"],
-        cha=char_data_for_scene["cha"],
-        armor=char_data_for_scene["armor"],
-        weapon=char_data_for_scene["weapon"],
-        coins=char_data_for_scene["coins"],
-        scene_text=first_scene_text
-    )
-
-    await message.answer("✨ Персонаж создан! Начало приключения:", parse_mode=ParseMode.HTML)
-    await message.answer(start_scene, parse_mode=ParseMode.HTML, reply_markup=make_game_keyboard())
-
-    history = [{"role":"assistant","content":start_scene}]
-    await state.update_data(history=history)
-    await state.set_state(Gen.history)
-
-
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
@@ -314,32 +228,24 @@ async def set_personality(message: Message, state: FSMContext):
 @router.message(CreateChar.appearance)
 async def set_appearance(message: Message, state: FSMContext):
     appearance = message.text.strip()
-    
+
     is_valid, error_msg = validate_text_input(appearance, min_length=10, max_length=1000)
     if not is_valid:
         return await message.answer(error_msg)
-    
+
     await state.update_data(appearance=appearance)
-    
-    await state.update_data(
-        day_counter=1,
-        equipment="Базовая экипировка по классу + 1 случайный предмет",
-        coins="1d6+1",
-        bag="Пустая сумка"
-    )
     
     await finish_creation(message, state)
 
 async def finish_creation(message: Message, state: FSMContext):
     data = await state.get_data()
 
+    # ---------- 1. Характеристики ----------
     stats = data.get("stats", {})
-    if isinstance(stats, dict):
-        stats_lines = [f"{k}: {v}" for k, v in stats.items()]
-        stats_str = "\n".join(stats_lines)
-    else:
-        stats_str = str(stats)
+    stats_lines = [f"{k}: {v}" for k, v in stats.items()]
+    stats_str = "\n".join(stats_lines)
 
+    # ---------- 2. CHARACTER блок ----------
     character_block = (
         "[CHARACTER]\n"
         f"Имя: {data.get('name','')}\n"
@@ -350,36 +256,65 @@ async def finish_creation(message: Message, state: FSMContext):
         f"Бонусы_расы: {data.get('apply_bonuses','')}\n"
         f"Характер: {data.get('personality','')}\n"
         f"Внешность: {data.get('appearance','')}\n"
-        f"День_старта: {data.get('day_counter','1')}\n"
-        f"Снаряжение: {data.get('equipment','Базовая экипировка по классу + 1 случайный предмет')}\n"
+        f"День_старта: {data.get('day_counter', 1)}\n"
+        f"Снаряжение: {data.get('equipment','Базовая экипировка')}\n"
         f"Монеты: {data.get('coins','1d6+1')}\n"
         f"Сумка: {data.get('bag','Пустая сумка')}\n"
         "[/CHARACTER]\n"
     )
 
+    # ---------- 3. Запись prompt.txt ----------
     try:
         with open(PROMPT_PATH, "w", encoding="utf-8") as f:
             f.write(character_block + "\n" + prompt_content)
     except Exception as e:
-        logger.exception("Не удалось записать prompt.txt: %s", e)
-        await message.answer("⚠️ Ошибка при сохранении prompt.txt. Проверь права записи на папку.", parse_mode=ParseMode.HTML)
-        await state.set_state(Gen.history)
+        logger.exception("Ошибка записи prompt.txt: %s", e)
+        await message.answer("⚠️ Не удалось сохранить персонажа.", parse_mode=ParseMode.HTML)
         return
 
-    await message.answer("✨ Персонаж создан и сохранён в prompt.txt. Формирую начало приключения...", parse_mode=ParseMode.HTML)
+    # ---------- 4. Подготовка данных для сцены ----------
+    scene_data = {
+        "name": data.get("name", ""),
+        "race": data.get("race", ""),
+        "class": data.get("char_class", ""),
+        "background": data.get("background", ""),
+        "personality": data.get("personality", ""),
+        "appearance": data.get("appearance", ""),
+        "str": stats.get("Сила", 0),
+        "dex": stats.get("Ловкость", 0),
+        "con": stats.get("Телосложение", 0),
+        "int": stats.get("Интеллект", 0),
+        "wis": stats.get("Мудрость", 0),
+        "cha": stats.get("Харизма", 0),
+        "armor": data.get("equipment", "Базовая экипировка"),
+        "weapon": "Основное оружие",
+        "coins": data.get("coins", "0"),
+    }
 
-    history = [{"role": "user", "content": character_block + "\n" + prompt_content}]
-    history = trim_history(history, max_pairs=8)
+    # ---------- 5. Загрузка start_scene.txt ----------
+    try:
+        with open(START_SCENE_PATH, "r", encoding="utf-8") as f:
+            template = f.read()
+    except Exception:
+        template = "{name} начинает своё приключение..."
 
-    raw = await safe_ai_generate(history, state, Gen.history)
-    response_text = raw if raw else "⚠️ Пустой ответ от сервера."
+    # ---------- 6. Формирование стартовой сцены ----------
+    start_scene = template.format(**scene_data)
 
-    response_text = response_text.replace("\n", "\n\n")
+    # ---------- 7. Отправка игроку ----------
+    await message.answer(
+        "✨ <b>Персонаж создан! Начало приключения:</b>",
+        parse_mode=ParseMode.HTML
+    )
 
-    keyboard = make_game_keyboard()
-    await message.answer(response_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await message.answer(
+        start_scene,
+        parse_mode=ParseMode.HTML,
+        reply_markup=make_game_keyboard()
+    )
 
-    history.append({"role": "assistant", "content": response_text})
+    # ---------- 8. Инициализация истории ----------
+    history = [{"role": "assistant", "content": start_scene}]
     await state.update_data(history=history)
     await state.set_state(Gen.history)
 
