@@ -7,25 +7,43 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 os.environ["OPENAI_API_KEY"] = AI_TOKEN
 
+# Базовая директория проекта (где лежит generate.py и prompt.txt)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROMPT_PATH = os.path.join(BASE_DIR, "prompt.txt")
+
 client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENAI_API_KEY"),
 )
 
 try:
-    with open("prompt.txt", "r", encoding="utf-8") as file:
-        prompt_content = file.read().strip()
+    with open(PROMPT_PATH, "r", encoding="utf-8") as file:
+        BASE_PROMPT = file.read().strip()
 except FileNotFoundError:
-    print("❌ Ошибка: файл prompt.txt не найден")
+    print(f"❌ Ошибка: файл prompt.txt не найден по пути: {PROMPT_PATH}")
     sys.exit(1)
 except Exception as e:
-    print(f"❌ Ошибка при чтении prompt.txt: {e}")
+    print(f"❌ Ошибка при чтении prompt.txt ({PROMPT_PATH}): {e}")
     sys.exit(1)
 
 
-async def ai_generate(messages: list):
+async def ai_generate(history: list):
     """Асинхронный запрос к DeepSeek API"""
     try:
+        # На каждый вызов читаем актуальный prompt.txt,
+        # чтобы там уже был [CHARACTER] + базовый промпт.
+        try:
+            with open(PROMPT_PATH, "r", encoding="utf-8") as f:
+                full_prompt = f.read().strip()
+        except Exception:
+            # Фоллбек — используем базовый промпт из момента запуска
+            full_prompt = BASE_PROMPT
+
+        messages = [
+            {"role": "system", "content": full_prompt},
+            *history,
+        ]
+
         response = await client.chat.completions.create(
             model="deepseek/deepseek-chat",
             messages=messages,
