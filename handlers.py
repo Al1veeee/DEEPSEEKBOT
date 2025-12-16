@@ -168,20 +168,28 @@ def make_choice_keyboard():
         keyboard=[
             [KeyboardButton(text="1"), KeyboardButton(text="2"), KeyboardButton(text="3")],
             [KeyboardButton(text="Свой вариант")],
-            [
-                KeyboardButton(text="📊 Статус"),
-                KeyboardButton(text="🎒 Инвентарь")
-            ],
-            [
-                KeyboardButton(text="✨ Заклинания"),
-                KeyboardButton(text="💰 Торговля")
-            ],
-            [
-                KeyboardButton(text="🛌 Отдых")
-            ],
+            [KeyboardButton(text="⚙️ Меню")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Выберите 1/2/3 или нажмите «Свой вариант»"
+    )
+
+def make_menu_inline_keyboard():
+    """Inline-клавиатура для меню"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📊 Статус", callback_data="menu_status"),
+                InlineKeyboardButton(text="🎒 Инвентарь", callback_data="menu_inventory")
+            ],
+            [
+                InlineKeyboardButton(text="✨ Заклинания", callback_data="menu_spells"),
+                InlineKeyboardButton(text="💰 Торговля", callback_data="menu_trade")
+            ],
+            [
+                InlineKeyboardButton(text="🛌 Отдых", callback_data="menu_rest")
+            ],
+        ]
     )
 
 def markdown_to_html(text: str) -> str:
@@ -654,6 +662,17 @@ async def finish_creation(message: Message, state: FSMContext):
 
     await message.answer(response_html, parse_mode=ParseMode.HTML, reply_markup=make_choice_keyboard())
 
+# Обработчик кнопки меню (должен быть выше continue_dialog для приоритета)
+@router.message(F.text == "⚙️ Меню")
+async def show_menu(message: Message, state: FSMContext):
+    """Показывает меню с опциями"""
+    await message.answer(
+        "⚙️ <b>Меню персонажа</b>\n\n"
+        "Выберите нужный раздел:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=make_menu_inline_keyboard()
+    )
+
 @router.message(Gen.history)
 async def continue_dialog(message: Message, state: FSMContext):
     user_text = (message.text or "").strip()
@@ -662,9 +681,9 @@ async def continue_dialog(message: Message, state: FSMContext):
     if user_text.startswith("/"):
         return
 
-    # Разрешаем прямой вызов кнопок-команд
-    if user_text in {"📊 Статус", "🎒 Инвентарь", "✨ Заклинания", "💰 Торговля", "🛌 Отдых"}:
-        return
+    # Разрешаем прямой вызов кнопок-команд (убираем блокировку, чтобы специализированные обработчики могли сработать)
+    # Убрано: if user_text in {"📊 Статус", ...}: return
+    # Теперь эти кнопки обрабатываются отдельными обработчиками ниже
 
     # Обработка вариантов выбора 1/2/3
     if user_text in {"1", "2", "3"}:
@@ -680,6 +699,8 @@ async def continue_dialog(message: Message, state: FSMContext):
             parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardRemove(),
         )
+
+    # Кнопка меню обрабатывается отдельным обработчиком выше
 
     # Любой другой ввод — просим использовать кнопки
     await message.answer(
@@ -704,7 +725,70 @@ async def custom_action(message: Message, state: FSMContext):
     # Возвращаемся к основному циклу диалога
     await process_user_turn(message, state, user_text)
 
-@router.message(F.text.in_(["📊 Статус", "/статус"]) | Command("статус"))
+# Обработчики callback для inline-кнопок меню
+@router.callback_query(F.data == "menu_status")
+async def menu_status_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик кнопки Статус в меню"""
+    await callback.answer()
+    data = await state.get_data()
+    coins_amount = data.get("coins", 0)
+    
+    await callback.message.edit_text(
+        "📊 <b>Статус персонажа</b>\n\n"
+        f"💰 Монеты: {coins_amount} золотых\n"
+        f"📅 День: {data.get('day_counter', 1)}\n\n"
+        "<i>Полная информация о персонаже будет доступна в будущих обновлениях.</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+@router.callback_query(F.data == "menu_inventory")
+async def menu_inventory_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик кнопки Инвентарь в меню"""
+    await callback.answer()
+    data = await state.get_data()
+    bag = data.get("bag", "Пустая сумка")
+    equipment = data.get("equipment", "Базовая экипировка")
+    
+    await callback.message.edit_text(
+        "🎒 <b>Инвентарь</b>\n\n"
+        f"🎒 Сумка: {bag}\n"
+        f"⚔️ Снаряжение: {equipment}\n\n"
+        "<i>Детальный инвентарь будет доступен в будущих обновлениях.</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+@router.callback_query(F.data == "menu_spells")
+async def menu_spells_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик кнопки Заклинания в меню"""
+    await callback.answer()
+    await callback.message.edit_text(
+        "✨ <b>Заклинания</b>\n\n"
+        "<i>Список заклинаний будет доступен в будущих обновлениях.</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+@router.callback_query(F.data == "menu_trade")
+async def menu_trade_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик кнопки Торговля в меню"""
+    await callback.answer()
+    await callback.message.edit_text(
+        "💰 <b>Торговля</b>\n\n"
+        "<i>Система торговли будет доступна в будущих обновлениях.</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+@router.callback_query(F.data == "menu_rest")
+async def menu_rest_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик кнопки Отдых в меню"""
+    await callback.answer()
+    await callback.message.edit_text(
+        "🛌 <b>Отдых</b>\n\n"
+        "<i>Система отдыха будет доступна в будущих обновлениях.</i>",
+        parse_mode=ParseMode.HTML
+    )
+
+# Обработчики команд (для совместимости)
+@router.message(Command("статус"))
 async def cmd_status(message: Message, state: FSMContext):
     """Обработчик команды /статус"""
     data = await state.get_data()
@@ -718,7 +802,7 @@ async def cmd_status(message: Message, state: FSMContext):
         parse_mode=ParseMode.HTML
     )
 
-@router.message(F.text.in_(["🎒 Инвентарь", "/инвентарь"]) | Command("инвентарь"))
+@router.message(Command("инвентарь"))
 async def cmd_inventory(message: Message, state: FSMContext):
     """Обработчик команды /инвентарь"""
     data = await state.get_data()
@@ -733,7 +817,7 @@ async def cmd_inventory(message: Message, state: FSMContext):
         parse_mode=ParseMode.HTML
     )
 
-@router.message(F.text.in_(["✨ Заклинания", "/заклинания"]) | Command("заклинания"))
+@router.message(Command("заклинания"))
 async def cmd_spells(message: Message, state: FSMContext):
     """Обработчик команды /заклинания"""
     await message.answer(
@@ -742,7 +826,7 @@ async def cmd_spells(message: Message, state: FSMContext):
         parse_mode=ParseMode.HTML
     )
 
-@router.message(F.text.in_(["💰 Торговля", "/торговля"]) | Command("торговля"))
+@router.message(Command("торговля"))
 async def cmd_trade(message: Message, state: FSMContext):
     """Обработчик команды /торговля"""
     await message.answer(
@@ -751,7 +835,7 @@ async def cmd_trade(message: Message, state: FSMContext):
         parse_mode=ParseMode.HTML
     )
 
-@router.message(F.text.in_(["🛌 Отдых", "/отдых"]) | Command("отдых"))
+@router.message(Command("отдых"))
 async def cmd_rest(message: Message, state: FSMContext):
     """Обработчик команды /отдых"""
     await message.answer(
