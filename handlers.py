@@ -316,7 +316,7 @@ async def cmd_start(message: Message, state: FSMContext):
 async def start_game_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
-    text = "🛡️ <b>Создание персонажа — Шаг 1 из 7</b>\n\n"
+    text = "🛡️ <b>Создание персонажа — Шаг 1 из 4</b>\n\n"
     text += "🌍 <b>Выберите расу вашего героя:</b>\n\n"
     for num, race in RACES.items():
         text += f"  <b>{num}.</b> {race}\n"
@@ -340,7 +340,7 @@ async def set_race(message: Message, state: FSMContext):
     await state.set_state(CreateChar.name)
     await message.answer(
         f"✅ <b>Раса выбрана:</b> {race}\n\n"
-        "✏️ <b>Создание персонажа — Шаг 2 из 7</b>\n\n"
+        "✏️ <b>Создание персонажа — Шаг 2 из 4</b>\n\n"
         "📝 <b>Введите имя вашего персонажа:</b>\n\n"
         "<i>Имя должно быть от 2 до 50 символов. Это имя будет известно по всему миру!</i>",
         parse_mode=ParseMode.HTML
@@ -354,7 +354,7 @@ async def set_name(message: Message, state: FSMContext):
     
     await state.update_data(name=cleaned_name)
     text = f"✅ <b>Имя выбрано:</b> {cleaned_name}\n\n"
-    text += "⚔️ <b>Создание персонажа — Шаг 3 из 7</b>\n\n"
+    text += "⚔️ <b>Создание персонажа — Шаг 3 из 4</b>\n\n"
     text += "🎭 <b>Выберите класс вашего героя:</b>\n\n"
     for num, cl in CLASSES.items():
         text += f"  <b>{num}.</b> {cl}\n"
@@ -374,7 +374,7 @@ async def set_class(message: Message, state: FSMContext):
 
     await state.update_data(char_class=cl)
     text = f"✅ <b>Класс выбран:</b> {cl}\n\n"
-    text += "📖 <b>Создание персонажа — Шаг 4 из 7</b>\n\n"
+    text += "📖 <b>Создание персонажа — Шаг 4 из 4</b>\n\n"
     text += "📚 <b>Выберите предысторию вашего героя:</b>\n\n"
     for num, bg in BACKGROUNDS.items():
         text += f"  <b>{num}.</b> {bg}\n"
@@ -392,10 +392,23 @@ async def set_background(message: Message, state: FSMContext):
             "Пожалуйста, введите <b>только номер</b> предыстории из списка (от 1 до 11)."
         )
 
+    # Меняем состояние СРАЗУ после валидации, чтобы избежать рекурсии
+    await state.set_state(CreateChar.finish)
+    
     await state.update_data(background=bg)
+    data = await state.get_data()
     stats_dict, stats_report = generate_stats_auto()
-    await state.update_data(stats=stats_dict)
+    
+    # Автоматически применяем бонусы расы
+    race = data.get("race", "")
+    updated_stats, bonus_report = apply_race_bonuses(stats_dict, race)
+    
+    # Обновляем характеристики
+    await state.update_data(stats=updated_stats)
+    stats_lines = [f"{k}: {v}" for k, v in updated_stats.items()]
+    stats_report = "\n".join(stats_lines)
     await state.update_data(stats_report=stats_report)
+    await state.update_data(apply_bonuses="да")  # Сохраняем, что бонусы применены
 
     stats_emoji_map = {
         "Сила": "💪",
@@ -414,98 +427,18 @@ async def set_background(message: Message, state: FSMContext):
     
     await message.answer(
         f"✅ <b>Предыстория выбрана:</b> {bg}\n\n"
-        "🎲 <b>Создание персонажа — Шаг 5 из 7</b>\n\n"
+        "🎲 <b>Создание персонажа — Шаг 4 из 4</b>\n\n"
         "⚡ <b>Характеристики персонажа:</b>\n\n" +
         "\n".join(stats_display) +
-        "\n\n🌟 <b>Применить бонусы расы автоматически?</b>\n"
-        "<i>Введите <b>да</b> или <b>нет</b></i>",
+        f"\n\n✨ <b>Бонусы расы применены автоматически!</b>\n"
+        f"{bonus_report}",
         parse_mode=ParseMode.HTML
     )
-    await state.set_state(CreateChar.apply_bonuses)
-
-@router.message(CreateChar.apply_bonuses)
-async def set_bonuses(message: Message, state: FSMContext):
-    answer = message.text.strip().lower()
-    if answer not in ("да", "нет"):
-        return await message.answer(
-            "❌ <b>Некорректный ответ</b>\n\n"
-            "Пожалуйста, введите <b>да</b> или <b>нет</b>."
-        )
-
-    await state.update_data(apply_bonuses=answer)
-
-    if answer == "да":
-        data = await state.get_data()
-        current_stats = data.get("stats", {})
-        race = data.get("race", "")
-        updated_stats, bonus_report = apply_race_bonuses(current_stats, race)
-
-        # Обновляем характеристики и отчет
-        await state.update_data(stats=updated_stats)
-        stats_lines = [f"{k}: {v}" for k, v in updated_stats.items()]
-        stats_report = "\n".join(stats_lines)
-        await state.update_data(stats_report=stats_report)
-
-        stats_emoji_map = {
-            "Сила": "💪",
-            "Ловкость": "🏹",
-            "Телосложение": "🛡️",
-            "Интеллект": "📚",
-            "Мудрость": "🔮",
-            "Харизма": "🎭"
-        }
-        
-        stats_display = []
-        for line in stats_report.split("\n"):
-            stat_name = line.split(":")[0]
-            emoji = stats_emoji_map.get(stat_name, "•")
-            stats_display.append(f"{emoji} {line}")
-        
-        await message.answer(
-            "✨ <b>Бонусы расы успешно применены!</b>\n\n"
-            f"{bonus_report}\n\n"
-            "⚡ <b>Обновлённые характеристики:</b>\n\n" +
-            "\n".join(stats_display),
-            parse_mode=ParseMode.HTML
-        )
-
-    await message.answer(
-        "🧠 <b>Создание персонажа — Шаг 6 из 7</b>\n\n"
-        "💭 <b>Опишите характер вашего героя:</b>\n\n"
-        "<i>Расскажите о его основных чертах, мотивациях, страхах, принципах и особенностях личности.\n"
-        "Это поможет создать уникального и живого персонажа!</i>\n\n"
-        "📝 <i>Минимум 10 символов, максимум 1000.</i>",
-        parse_mode=ParseMode.HTML
-    )
-    await state.set_state(CreateChar.personality)
-
-@router.message(CreateChar.personality)
-async def set_personality(message: Message, state: FSMContext):
-    is_valid, cleaned_personality, error_msg = validate_text_input(message.text, min_length=10, max_length=1000)
-    if not is_valid:
-        return await message.answer(error_msg, parse_mode=ParseMode.HTML)
     
-    await state.update_data(personality=cleaned_personality)
-    await message.answer(
-        f"✅ <b>Характер описан!</b>\n\n"
-        "🎨 <b>Создание персонажа — Шаг 7 из 7</b>\n\n"
-        "👁️ <b>Опишите внешность вашего героя:</b>\n\n"
-        "<i>Расскажите о его внешних чертах, одежде, отличительных особенностях, росте, телосложении.\n"
-        "Создайте яркий визуальный образ, который запомнится!</i>\n\n"
-        "📝 <i>Минимум 10 символов, максимум 1000.</i>",
-        parse_mode=ParseMode.HTML
-    )
-    await state.set_state(CreateChar.appearance)
-
-@router.message(CreateChar.appearance)
-async def set_appearance(message: Message, state: FSMContext):
-    is_valid, cleaned_appearance, error_msg = validate_text_input(message.text, min_length=10, max_length=1000)
-    if not is_valid:
-        return await message.answer(error_msg, parse_mode=ParseMode.HTML)
-
-    await state.update_data(appearance=cleaned_appearance)
-    
+    # Сразу завершаем создание персонажа
     await finish_creation(message, state)
+
+
 
 async def finish_creation(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -533,9 +466,7 @@ async def finish_creation(message: Message, state: FSMContext):
         f"Класс: {data.get('char_class','')}\n"
         f"Предыстория: {data.get('background','')}\n"
         f"Характеристики:\n{stats_str}\n"
-        f"Бонусы_расы: {data.get('apply_bonuses','')}\n"
-        f"Характер: {data.get('personality','')}\n"
-        f"Внешность: {data.get('appearance','')}\n"
+        f"Бонусы_расы: {data.get('apply_bonuses','да')}\n"
         f"День_старта: {data.get('day_counter', 1)}\n"
         f"Снаряжение: {data.get('equipment','Базовая экипировка')}\n"
         f"Монеты: {coins_amount}\n"
@@ -559,8 +490,6 @@ async def finish_creation(message: Message, state: FSMContext):
         "race": data.get("race", ""),
         "class": data.get("char_class", ""),
         "background": data.get("background", ""),
-        "personality": data.get("personality", ""),
-        "appearance": data.get("appearance", ""),
         "str": stats.get("Сила", 0),
         "dex": stats.get("Ловкость", 0),
         "con": stats.get("Телосложение", 0),
@@ -595,8 +524,6 @@ async def finish_creation(message: Message, state: FSMContext):
     character_info = (
         f"🧙♂️ <b>Персонаж создан успешно!</b>\n\n"
         f"{data.get('name', '')} — {data.get('race', '')}, {data.get('char_class', '')} ({data.get('background', '')})\n\n"
-        f"⚔️ <b>Характер:</b> {data.get('personality', '')}\n\n"
-        f"👁️ <b>Внешность:</b> {data.get('appearance', '')}\n\n"
         f"<b>Характеристики:</b>\n\n"
     )
     

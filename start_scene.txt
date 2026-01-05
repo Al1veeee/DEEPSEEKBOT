@@ -1,10 +1,8 @@
 {name} — {race} {class}
 
-Внешность:
-{appearance}
-
-Характер:
-{personality}
-
 Сила: {str}
 Ловкость: {dex}
+Телосложение: {con}
+Интеллект: {int}
+Мудрость: {wis}
+Харизма: {cha}
