@@ -21,4 +21,4 @@ YANDEX_API_KEY = os.getenv('YANDEX_API_KEY', '')
 # Формат: gpt://<folder-id>/<model-name>
 # folder-id - ID каталога в Yandex Cloud (можно найти в консоли)
 # model-name: yandexgpt-lite, yandexgpt, yandexgpt-pro
-YANDEX_MODEL_URI = os.getenv('YANDEX_MODEL_URI', 'gpt://b1gdoose5habmm2ishlb/yandexgpt-lite')
+YANDEX_MODEL_URI = os.getenv('YANDEX_MODEL_URI', 'gpt://b1gdoose5habmm2ishlb/qwen3-235b-a22b-fp8/latest')
